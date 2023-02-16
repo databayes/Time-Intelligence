@@ -1,0 +1,441 @@
+//Date table, measure and calculated column
+// Don't forget to mark as a date table and format appropriately
+Date = 
+VAR FirstFiscalMonth = 6
+VAR FirstDayofWeek = 1  -- 0 = Sunday, 1 = Monday, ...
+VAR FirstYear = 
+    YEAR(MIN(Sales[Order Date]))
+RETURN
+GENERATE(
+    FILTER(
+        CALENDARAUTO(),
+        YEAR([Date]) >= FirstYear
+    ),
+    VAR Yr = YEAR([Date]) 
+    VAR Mn = MONTH([Date])  
+    VAR Qr = QUARTER([Date])  
+    VAR MnQ = Mn - 3 * (Qr - 1)  
+    VAR Wd = WEEKDAY([Date], 1) - 1
+    VAR Fyr = Yr + 1 * (FirstFiscalMonth > 1 && Mn >=FirstFiscalMonth)
+    VAR Fqr = FORMAT(EOMONTH([Date], 1 - FirstFiscalMonth), "\QQ")
+    RETURN ROW(
+        "Year", DATE(Yr, 12,31), //yyyy
+        "Year Quarter", FORMAT([Date], "\QQ-YYYY"), //text
+        "Year Quarter Date", EOMONTH([Date], 3 - MnQ), //hidden
+        "Quarter", FORMAT([Date], "\QQ"), //text
+        "Year Month", EOMONTH( [Date], 0), //mmm yyyy
+        "Month", DATE( 1900, MONTH( [Date] ), 1), //mmm
+        "Day of Week", DATE ( 1900, 1, 7 + Wd + (7 * (Wd < FirstDayofWeek) )), //ddd
+        "Fiscal Year", DATE ( Fyr + (FirstFiscalMonth = 1 ), FirstFiscalMonth, 1 ) - 1, // \F\Y yyyy
+        "Fiscal Year Quarter", "F" & Fqr & "-" & Fyr, // text
+        "Fiscal Year Quarter Date", EOMONTH( [Date], 3 - MnQ ), // Hidden
+        "Fiscal Quarter", "F" & Fqr // text
+    )
+)
+
+
+
+//Calculated Column
+DateWithSales = 'Date'[Date] <= MAX( Sales[Order Date])
+
+//Date Measure
+ShowValueForDates = 
+VAR LastDateWithData = 
+    CALCULATE(  
+        MAX('Sales'[Order Date]),
+    REMOVEFILTERS()
+    )
+VAR FirstDateVisible = 
+    MIN('Date'[Date])
+VAR Result = 
+    FirstDateVisible <= LastDateWithData
+RETURN
+    Result
+
+//Time Intelligence - measures for Sales Table
+Sales Amount = SUMX(Sales, Sales[OrderQuantity] * Sales[UnitPrice])
+
+Sales YTD = 
+IF([ShowValueForDates],
+    CALCULATE([Sales Amount],
+    DATESYTD('Date'[Date])
+    )
+)
+
+Sales QTD = 
+IF(
+    [ShowValueForDates],
+    CALCULATE(
+        [Sales Amount],
+        DATESQTD('Date'[Date])
+    )
+)
+
+Sales MTD = 
+IF(
+    [ShowValueForDates],
+    CALCULATE(
+        [Sales Amount],
+        DATESMTD('Date'[Date])
+    )
+)
+
+Sales Fiscal YTD = 
+// Year to Date
+IF(
+    [ShowValueForDates],
+    CALCULATE(
+        [Sales Amount],
+        DATESYTD('Date'[Date], "3-31")
+    )
+)
+
+Sales PY = 
+// sales for previous year, but filter to only go as far as those dates in this year that have had Sales
+IF(
+    [ShowValueForDates],
+    CALCULATE(
+        [Sales Amount],
+        CALCULATETABLE(
+            DATEADD('Date'[Date], -1, YEAR),
+            'Date'[DateWithSales] = TRUE
+        )
+    )
+)
+
+Sales YOY = 
+VAR ValueCurrentPeriod = [Sales Amount]
+VAR ValuePreviousPeriod = [Sales PY]
+VAR Result = 
+    IF(NOT ISBLANK(ValueCurrentPeriod ) && NOT ISBLANK( ValuePreviousPeriod),
+    ValueCurrentPeriod - ValuePreviousPeriod
+    )
+RETURN Result
+
+
+Sales YOY% = 
+DIVIDE(
+    [Sales YOY], [Sales PY]
+)
+
+Sales PQ = 
+IF(
+    [ShowValueForDates],
+    CALCULATE(
+        [Sales Amount],
+        CALCULATETABLE(
+            DATEADD('Date'[Date], -1, QUARTER),
+            'Date'[DateWithSales] = TRUE
+        )
+    )
+)
+
+
+Sales QOQ = 
+VAR ValueCurrentPeriod = [Sales Amount]
+VAR ValuePreviousPeriod = [Sales PQ]
+VAR Result = 
+    IF(
+    NOT ISBLANK(ValueCurrentPeriod) && NOT ISBLANK(ValuePreviousPeriod),
+    ValueCurrentPeriod - ValuePreviousPeriod
+    )
+RETURN Result
+
+
+Sales QOQ % = 
+DIVIDE(
+    [Sales QOQ],
+    [Sales PQ]
+)
+
+
+Sales PM = 
+IF(
+    [ShowValueForDates],
+    CALCULATE(
+        [Sales Amount],
+        CALCULATETABLE(
+            DATEADD('Date'[Date], -1, MONTH),
+            'Date'[DateWithSales] = TRUE
+        )
+    )
+)
+
+Sales MOM = 
+VAR ValueCurrentPeriod = [Sales Amount]
+VAR ValuePreviousPeriod = [Sales PM]
+VAR Result = 
+    IF(
+    NOT ISBLANK(ValueCurrentPeriod) && NOT ISBLANK(ValuePreviousPeriod),
+    ValueCurrentPeriod - ValuePreviousPeriod
+    )
+RETURN Result
+
+
+Sales MOM % = 
+DIVIDE(
+    [Sales MOM],
+    [Sales PM]
+)
+
+Sales POP  = 
+SWITCH(
+    TRUE,
+    ISINSCOPE('Date'[Year Month] ), [Sales MOM] ,
+    ISINSCOPE('Date'[Year Quarter] ), [Sales QOQ],
+    ISINSCOPE('Date'[Year] ), [Sales YOY]
+)
+
+
+Sales POP % = 
+SWITCH(
+    TRUE,
+    ISINSCOPE('Date'[Year Month] ), [Sales MOM %] ,
+    ISINSCOPE('Date'[Year Quarter] ), [Sales QOQ %],
+    ISINSCOPE('Date'[Year] ), [Sales YOY%]
+)
+
+Sales PP = 
+SWITCH(
+    TRUE,
+    ISINSCOPE('Date'[Year Month] ), [Sales PM] ,
+    ISINSCOPE('Date'[Year Quarter] ), [Sales PQ],
+    ISINSCOPE('Date'[Year] ), [Sales PY]
+)
+
+
+Sales PYTD = 
+IF(
+    [ShowValueForDates],
+    CALCULATE(
+        [Sales YTD],
+        CALCULATETABLE(
+            DATEADD('Date'[Date], -1, YEAR),
+            'Date'[DateWithSales] = TRUE
+        )
+    )
+)
+
+
+Sales YOYTD = 
+VAR ValueCurrentPeriod = [Sales YTD]
+VAR ValuePreviousPeriod = [Sales PYTD]
+VAR Result = 
+IF(
+    NOT ISBLANK(ValueCurrentPeriod) && NOT ISBLANK(ValuePreviousPeriod),
+    ValueCurrentPeriod - ValuePreviousPeriod
+)
+RETURN Result
+
+
+Sales YOYTD % = 
+DIVIDE(
+    [Sales YOYTD],
+    [Sales PYTD]
+)
+
+
+
+Sales PQTD = 
+IF(
+    [ShowValueForDates],
+    CALCULATE(
+        [Sales QTD],
+        CALCULATETABLE(
+            DATEADD('Date'[Date], -1, QUARTER),
+            'Date'[DateWithSales] = TRUE
+        )
+    )
+)
+
+Sales QOQTD = 
+VAR ValueCurrentPeriod = [Sales QTD]
+VAR ValuePreviousPeriod = [Sales PQTD]
+VAR Result = 
+IF(
+    NOT ISBLANK(ValueCurrentPeriod) && NOT ISBLANK(ValuePreviousPeriod),
+    ValueCurrentPeriod - ValuePreviousPeriod
+)
+RETURN Result
+
+Sales QOQTD % = 
+DIVIDE(
+    [Sales QOQTD],
+    [Sales PQTD]
+)
+
+
+
+
+Sales PMTD = 
+IF(
+    [ShowValueForDates],
+    CALCULATE(
+        [Sales MTD],
+        CALCULATETABLE(
+            DATEADD('Date'[Date], -1, MONTH),
+            'Date'[DateWithSales] = TRUE
+        )
+    )
+)
+
+Sales MOMTD = 
+VAR ValueCurrentPeriod = [Sales MTD]
+VAR ValuePreviousPeriod = [Sales PMTD]
+VAR Result = 
+IF(
+    NOT ISBLANK(ValueCurrentPeriod) && NOT ISBLANK(ValuePreviousPeriod),
+    ValueCurrentPeriod - ValuePreviousPeriod
+)
+RETURN Result
+
+Sales MOMTD % = 
+DIVIDE(
+    [Sales MOMTD],
+    [Sales PMTD]
+)
+
+
+Sales PYC = 
+//Sales Previous Year Complete
+IF(
+    [ShowValueForDates],
+    CALCULATE(
+        [Sales Amount],
+        PARALLELPERIOD('Date'[Date], -1, YEAR)
+    )
+)
+
+
+Sales YTDOPY = 
+// Year to date compared to Previous Year in full 
+VAR ValueCurrentPeriod = [Sales YTD]
+VAR ValuePreviousPeriod = [Sales PYC]
+VAR Result = 
+IF(
+    NOT ISBLANK(ValueCurrentPeriod) && NOT ISBLANK(ValuePreviousPeriod),
+    ValueCurrentPeriod - ValuePreviousPeriod
+)
+RETURN Result
+
+
+Sales YTDOPY % = 
+DIVIDE(
+    [Sales YTDOPY],
+    [Sales PYC]
+)
+
+
+Sales Fiscal PYC = 
+//Sales Previous Fiscal Year Complete
+IF(
+    [ShowValueForDates],
+    CALCULATE(
+        [Sales Amount],
+        PREVIOUSYEAR('Date'[Date], "31-03")
+    )
+)
+
+
+Sales Fiscal YTDOPY = 
+// Year to date compared to Previous Year in full 
+VAR ValueCurrentPeriod = [Sales Fiscal YTD]
+VAR ValuePreviousPeriod = [Sales Fiscal PYC]
+VAR Result = 
+IF(
+    NOT ISBLANK(ValueCurrentPeriod) && NOT ISBLANK(ValuePreviousPeriod),
+    ValueCurrentPeriod - ValuePreviousPeriod
+)
+RETURN Result
+
+
+Sales Fiscal YOYTD % = 
+DIVIDE(
+    [Sales Fiscal YTDOPY],
+    [Sales Fiscal PYC]
+)
+
+
+Sales PQC = 
+//Sales Previous Quarter Complete
+IF(
+    [ShowValueForDates] && HASONEVALUE('Date'[Year Quarter]),
+    CALCULATE(
+        [Sales Amount],
+        PARALLELPERIOD('Date'[Date], -1, QUARTER)
+    )
+)
+
+Sales QTDOPQ = 
+// Quarter to date compared to Previous Month in full 
+VAR ValueCurrentPeriod = [Sales QTD]
+VAR ValuePreviousPeriod = [Sales PQC]
+VAR Result = 
+IF(
+    NOT ISBLANK(ValueCurrentPeriod) && NOT ISBLANK(ValuePreviousPeriod),
+    ValueCurrentPeriod - ValuePreviousPeriod
+)
+RETURN Result
+
+Sales QTDOPQ % = 
+DIVIDE(
+    [Sales QTDOPQ],
+    [Sales PQC]
+)
+
+Sales PMC = 
+//Sales Previous Month Complete
+IF(
+    [ShowValueForDates] && HASONEVALUE('Date'[Year Month]),
+    CALCULATE(
+        [Sales Amount],
+        PARALLELPERIOD('Date'[Date], -1, MONTH)
+    )
+)
+
+Sales MTDOPM = 
+// Month to date compared to Previous Month in full 
+VAR ValueCurrentPeriod = [Sales MTD]
+VAR ValuePreviousPeriod = [Sales PMC]
+VAR Result = 
+IF(
+    NOT ISBLANK(ValueCurrentPeriod) && NOT ISBLANK(ValuePreviousPeriod),
+    ValueCurrentPeriod - ValuePreviousPeriod
+)
+RETURN Result
+
+
+Sales MTDOPM % = 
+DIVIDE(
+    [Sales MTDOPM],
+    [Sales PMC]
+)
+
+
+//MOVING ANNUAL TOTAL
+
+Sales MAT = 
+IF(
+    [ShowValueForDates],
+    CALCULATE(
+        [Sales Amount],
+        DATESINPERIOD(
+            'Date'[Date],
+            MAX( 'Date'[Date]),
+            -1,
+            YEAR
+        )
+    )
+)
+
+
+//MOVING AVERAGE
+
+Profit Margins 1M MA = 
+AVERAGEX(
+    DATESINPERIOD('Dates'[Date],
+    LASTDATE('Dates'[Date]),
+    -1,
+    MONTH ),
+    [% Profit Margins]
+)
