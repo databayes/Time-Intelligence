@@ -1,0 +1,163 @@
+-------------------
+-- Measure: [MOM %]
+-------------------
+MEASURE 'Key Measures'[MOM %] = 
+    IF( [Sales] > 0 && [Sales LY] > 0,
+    DIVIDE(
+        [sales],[Sales LM]) -1
+    )
+    FormatString = "0%;-0%;0%"
+
+----------------------------------
+-- Measure: [Running Total 1 Year]
+----------------------------------
+MEASURE 'Key Measures'[Running Total 1 Year] = 
+    CALCULATE(
+        [Sales],
+        DATESINPERIOD(
+            'Date'[Date],
+            MAX('Date'[Date]),
+            -1,
+            YEAR)
+    )
+
+------------------------------------
+-- Measure: [Running Total 2 Months]
+------------------------------------
+MEASURE 'Key Measures'[Running Total 2 Months] = 
+    CALCULATE(
+        [Sales],
+        DATESINPERIOD(
+            'Date'[Date],
+            MAX('Date'[Date]),
+            -2,
+            MONTH)
+    )
+
+-----------------------------------
+-- Measure: [Running Total 30 Days]
+-----------------------------------
+MEASURE 'Key Measures'[Running Total 30 Days] = 
+    CALCULATE(
+        [Sales],
+        DATESINPERIOD(
+            'Date'[Date],
+            MAX('Date'[Date]),
+            -30,
+            DAY)
+    )
+
+-------------------
+-- Measure: [Sales]
+-------------------
+MEASURE 'Key Measures'[Sales] = 
+    SUMX(Sales,
+    Sales[SalesQuantity] * Sales[UnitPrice])
+    FormatString = "#,0"
+
+----------------------
+-- Measure: [Sales LM]
+----------------------
+MEASURE 'Key Measures'[Sales LM] = 
+    CALCULATE(
+        [Sales],
+        DATEADD(
+            'Date'[Date] , -1 , MONTH
+        )
+    )
+
+-----------------------------------
+-- Measure: [Sales LM (Full Month)]
+-----------------------------------
+MEASURE 'Key Measures'[Sales LM (Full Month)] = 
+    CALCULATE(
+        [Sales],
+        PARALLELPERIOD('Date'[Date] , -1 , MONTH )
+    )
+
+----------------------
+-- Measure: [Sales LY]
+----------------------
+MEASURE 'Key Measures'[Sales LY] = 
+    CALCULATE(
+        [Sales],
+        DATEADD(
+            'Date'[Date] , -1 , YEAR
+        )
+    )
+    FormatString = "#,0"
+
+----------------------------------
+-- Measure: [Sales LY (Full Year)]
+----------------------------------
+MEASURE 'Key Measures'[Sales LY (Full Year)] = 
+    CALCULATE(
+        [Sales],
+        PARALLELPERIOD('Date'[Date] , -1 , YEAR )
+    )
+
+-----------------------
+-- Measure: [Sales MTD]
+-----------------------
+MEASURE 'Key Measures'[Sales MTD] = 
+    CALCULATE(
+        [Sales],
+        DATESMTD('Date'[Date])
+    )
+
+--------------------------
+-- Measure: [Sales MTD LM]
+--------------------------
+MEASURE 'Key Measures'[Sales MTD LM] = 
+    CALCULATE(
+        [Sales LM],
+        DATESMTD('Date'[Date])
+    )
+
+---------------------------------
+-- Measure: [Sales Running Total]
+---------------------------------
+MEASURE 'Key Measures'[Sales Running Total] = 
+    CALCULATE(
+        [Sales],
+        'Date'[Date] <= MAX('Date'[Date])
+    )
+    FormatString = "#,0"
+
+-----------------------
+-- Measure: [Sales YTD]
+-----------------------
+MEASURE 'Key Measures'[Sales YTD] = 
+    CALCULATE(
+        [Sales],
+        DATESYTD('Date'[Date])
+    )
+
+------------------------------------------
+-- Measure: [Sales YTD % on Full LY Sales]
+------------------------------------------
+MEASURE 'Key Measures'[Sales YTD % on Full LY Sales] = 
+    DIVIDE(
+        [Sales YTD],
+        [Sales LY (Full Year)]
+    )
+    FormatString = "0.00%;-0.00%;0.00%"
+
+--------------------------
+-- Measure: [Sales YTD LY]
+--------------------------
+MEASURE 'Key Measures'[Sales YTD LY] = 
+    CALCULATE(
+        [Sales LY],
+        DATESYTD('Date'[Date])
+    )
+
+-------------------
+-- Measure: [YOY %]
+-------------------
+MEASURE 'Key Measures'[YOY %] = 
+    IF( [Sales] > 0 && [Sales LY] > 0,
+    DIVIDE(
+        [sales],[Sales LY]) -1
+    )
+    FormatString = "0.00%;-0.00%;0.00%"
